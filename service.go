@@ -199,7 +199,8 @@ func (s *Service) NewConnection(ctx context.Context, conn net.Conn, metadata M.M
 			return bufio.CopyConn(ctx, conn, handshakeConn)
 		}
 
-		if s.strictMode && !isServerHelloSupportTLS13(serverHelloFrame.Bytes()) {
+		supportTLS13 := isServerHelloSupportTLS13(serverHelloFrame.Bytes())
+		if s.strictMode && !supportTLS13 {
 			s.logger.WarnContext(ctx, "TLS 1.3 is not supported, will copy bidirectional")
 			return bufio.CopyConn(ctx, conn, handshakeConn)
 		}
@@ -247,6 +248,6 @@ func (s *Service) NewConnection(ctx context.Context, conn net.Conn, metadata M.M
 			return E.Cause(err, "handshake relay")
 		}
 		s.logger.TraceContext(ctx, "handshake relay finished")
-		return s.handler.NewConnection(ctx, bufio.NewCachedConn(newVerifiedConn(conn, hmacAdd, hmacVerify, nil), clientFirstFrame), metadata)
+		return s.handler.NewConnection(ctx, bufio.NewCachedConn(newVerifiedConn(conn, hmacAdd, hmacVerify, nil, !supportTLS13), clientFirstFrame), metadata)
 	}
 }

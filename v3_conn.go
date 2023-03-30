@@ -17,10 +17,11 @@ import (
 
 type verifiedConn struct {
 	net.Conn
-	writer     N.VectorisedWriter
-	hmacAdd    hash.Hash
-	hmacVerify hash.Hash
-	hmacIgnore hash.Hash
+	writer       N.VectorisedWriter
+	hmacAdd      hash.Hash
+	hmacVerify   hash.Hash
+	hmacIgnore   hash.Hash
+	alertEnabled bool
 
 	buffer *buf.Buffer
 }
@@ -30,13 +31,15 @@ func newVerifiedConn(
 	hmacAdd hash.Hash,
 	hmacVerify hash.Hash,
 	hmacIgnore hash.Hash,
+	alertEnabled bool,
 ) *verifiedConn {
 	return &verifiedConn{
-		Conn:       conn,
-		writer:     bufio.NewVectorisedWriter(conn),
-		hmacAdd:    hmacAdd,
-		hmacVerify: hmacVerify,
-		hmacIgnore: hmacIgnore,
+		Conn:         conn,
+		writer:       bufio.NewVectorisedWriter(conn),
+		hmacAdd:      hmacAdd,
+		hmacVerify:   hmacVerify,
+		hmacIgnore:   hmacIgnore,
+		alertEnabled: alertEnabled,
 	}
 }
 
@@ -52,7 +55,7 @@ func (c *verifiedConn) Read(b []byte) (n int, err error) {
 		var tlsHeader [tlsHeaderSize]byte
 		_, err = io.ReadFull(c.Conn, tlsHeader[:])
 		if err != nil {
-			sendAlert(c.Conn)
+			sendAlert(c.Conn, c.alertEnabled)
 			return
 		}
 		length := int(binary.BigEndian.Uint16(tlsHeader[3:tlsHeaderSize]))
@@ -78,13 +81,13 @@ func (c *verifiedConn) Read(b []byte) (n int, err error) {
 				}
 			}
 			if !verifyApplicationData(buffer, c.hmacVerify, true) {
-				sendAlert(c.Conn)
+				sendAlert(c.Conn, c.alertEnabled)
 				err = E.New("application data verification failed")
 				return
 			}
 			c.buffer.Advance(tlsHmacHeaderSize)
 		default:
-			sendAlert(c.Conn)
+			sendAlert(c.Conn, c.alertEnabled)
 			err = E.New("unexpected TLS record type: ", buffer[0])
 			return
 		}
@@ -154,7 +157,11 @@ func verifyApplicationData(frame []byte, hmac hash.Hash, update bool) bool {
 	return bytes.Equal(frame[tlsHeaderSize:tlsHeaderSize+hmacSize], hmacHash)
 }
 
-func sendAlert(writer io.Writer) {
+func sendAlert(writer io.Writer, alertEnabled bool) {
+	if !alertEnabled {
+		return
+	}
+
 	const recordSize = 31
 	record := [recordSize]byte{
 		alert,

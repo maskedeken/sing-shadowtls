@@ -66,7 +66,7 @@ func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	shadowTLSConn, err :=  c.DialContextConn(ctx, conn)
+	shadowTLSConn, err := c.DialContextConn(ctx, conn)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -116,6 +116,6 @@ func (c *Client) DialContextConn(ctx context.Context, conn net.Conn) (net.Conn, 
 		hmacVerify := hmac.New(sha1.New, []byte(c.password))
 		hmacVerify.Write(serverRandom)
 		hmacVerify.Write([]byte("S"))
-		return newVerifiedConn(conn, hmacAdd, hmacVerify, readHMAC), nil
+		return newVerifiedConn(conn, hmacAdd, hmacVerify, readHMAC, !stream.SupportTLS13()), nil
 	}
 }
