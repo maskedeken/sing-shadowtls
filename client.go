@@ -116,6 +116,6 @@ func (c *Client) DialContextConn(ctx context.Context, conn net.Conn) (net.Conn, 
 		hmacVerify := hmac.New(sha1.New, []byte(c.password))
 		hmacVerify.Write(serverRandom)
 		hmacVerify.Write([]byte("S"))
-		return newVerifiedConn(conn, hmacAdd, hmacVerify, readHMAC), nil
+		return newVerifiedConn(conn, hmacAdd, hmacVerify, readHMAC, !stream.SupportTLS13()), nil
 	}
 }
