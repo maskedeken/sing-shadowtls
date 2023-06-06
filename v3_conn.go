@@ -17,11 +17,12 @@ import (
 
 type verifiedConn struct {
 	net.Conn
-	writer       N.VectorisedWriter
-	hmacAdd      hash.Hash
-	hmacVerify   hash.Hash
-	hmacIgnore   hash.Hash
-	alertEnabled bool
+	writer           N.ExtendedWriter
+	vectorisedWriter N.VectorisedWriter
+	hmacAdd          hash.Hash
+	hmacVerify       hash.Hash
+	hmacIgnore       hash.Hash
+	alertEnabled     bool
 
 	buffer *buf.Buffer
 }
@@ -34,12 +35,13 @@ func newVerifiedConn(
 	alertEnabled bool,
 ) *verifiedConn {
 	return &verifiedConn{
-		Conn:         conn,
-		writer:       bufio.NewVectorisedWriter(conn),
-		hmacAdd:      hmacAdd,
-		hmacVerify:   hmacVerify,
-		hmacIgnore:   hmacIgnore,
-		alertEnabled: alertEnabled,
+		Conn:             conn,
+		writer:           bufio.NewExtendedWriter(conn),
+		vectorisedWriter: bufio.NewVectorisedWriter(conn),
+		hmacAdd:          hmacAdd,
+		hmacVerify:       hmacVerify,
+		hmacIgnore:       hmacIgnore,
+		alertEnabled:     alertEnabled,
 	}
 }
 
@@ -124,11 +126,25 @@ func (c *verifiedConn) write(p []byte) (n int, err error) {
 	hmacHash := c.hmacAdd.Sum(nil)[:hmacSize]
 	c.hmacAdd.Write(hmacHash)
 	copy(header[tlsHeaderSize:], hmacHash)
-	_, err = bufio.WriteVectorised(c.writer, [][]byte{common.Dup(header[:]), p})
+	_, err = bufio.WriteVectorised(c.vectorisedWriter, [][]byte{common.Dup(header[:]), p})
 	if err == nil {
 		n = len(p)
 	}
 	return
+}
+
+func (c *verifiedConn) WriteBuffer(buffer *buf.Buffer) error {
+	c.hmacAdd.Write(buffer.Bytes())
+	dateLen := buffer.Len()
+	header := buffer.ExtendHeader(tlsHmacHeaderSize)
+	header[0] = applicationData
+	header[1] = 3
+	header[2] = 3
+	binary.BigEndian.PutUint16(header[3:tlsHeaderSize], hmacSize+uint16(dateLen))
+	hmacHash := c.hmacAdd.Sum(nil)[:hmacSize]
+	c.hmacAdd.Write(hmacHash)
+	copy(header[tlsHeaderSize:], hmacHash)
+	return c.writer.WriteBuffer(buffer)
 }
 
 func (c *verifiedConn) WriteVectorised(buffers []*buf.Buffer) error {
@@ -142,7 +158,11 @@ func (c *verifiedConn) WriteVectorised(buffers []*buf.Buffer) error {
 	}
 	c.hmacAdd.Write(c.hmacAdd.Sum(nil)[:hmacSize])
 	copy(header[tlsHeaderSize:], c.hmacAdd.Sum(nil)[:hmacSize])
-	return c.writer.WriteVectorised(append([]*buf.Buffer{buf.As(header[:])}, buffers...))
+	return c.vectorisedWriter.WriteVectorised(append([]*buf.Buffer{buf.As(header[:])}, buffers...))
+}
+
+func (c *verifiedConn) FrontHeadroom() int {
+	return tlsHmacHeaderSize
 }
 
 func (c *verifiedConn) NeedAdditionalReadDeadline() bool {
