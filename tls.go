@@ -1,9 +1,7 @@
-//go:build go1.20
-
 package shadowtls
 
 import (
-	sTLS "github.com/sagernet/sing-shadowtls/tls"
+	sTLS "github.com/sagernet/sing-shadowtls/internal/tls"
 )
 
 type (
