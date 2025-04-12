@@ -6,6 +6,8 @@ import (
 	"net"
 
 	"github.com/sagernet/sing/common"
+
+	utls "github.com/metacubex/utls"
 )
 
 type (
@@ -20,7 +22,7 @@ type (
 
 func DefaultTLSHandshakeFunc(password string, config *tls.Config) TLSHandshakeFunc {
 	return func(ctx context.Context, conn net.Conn, sessionIDGenerator TLSSessionIDGeneratorFunc) error {
-		tlsConfig := &sTLSConfig{
+		tlsConfig := &utls.Config{
 			Rand:                  config.Rand,
 			Time:                  config.Time,
 			VerifyPeerCertificate: config.VerifyPeerCertificate,
@@ -31,14 +33,14 @@ func DefaultTLSHandshakeFunc(password string, config *tls.Config) TLSHandshakeFu
 			CipherSuites:          config.CipherSuites,
 			MinVersion:            config.MinVersion,
 			MaxVersion:            config.MaxVersion,
-			CurvePreferences: common.Map(config.CurvePreferences, func(it tls.CurveID) sTLSCurveID {
-				return sTLSCurveID(it)
+			CurvePreferences: common.Map(config.CurvePreferences, func(it tls.CurveID) utls.CurveID {
+				return utls.CurveID(it)
 			}),
 			SessionTicketsDisabled: config.SessionTicketsDisabled,
-			Renegotiation:          sTLSRenegotiationSupport(config.Renegotiation),
-			SessionIDGenerator:     generateSessionID(password),
+			Renegotiation:          utls.RenegotiationSupport(config.Renegotiation),
+			SessionIDGenerator:     sessionIDGenerator,
 		}
-		tlsConn := sTLSClient(conn, tlsConfig)
+		tlsConn := utls.Client(conn, tlsConfig)
 		return tlsConn.HandshakeContext(ctx)
 	}
 }
